@@ -12,7 +12,7 @@ import (
 	"sync"
 	"testing"
 
-	"mock-swift-server/swift"
+	"light-swift-server/swift"
 )
 
 // The SwiftServer type

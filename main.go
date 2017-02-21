@@ -1,7 +1,7 @@
 package main
 
 import "fmt"
-import "mock-swift-server/swifttest"
+import "light-swift-server/swifttest"
 
 func main() {
 	_, err := swifttest.NewSwiftServer()

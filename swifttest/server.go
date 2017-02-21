@@ -17,7 +17,7 @@ import (
 	"regexp"
 	"strings"
 
-	"mock-swift-server/swift"
+	"light-swift-server/swift"
 )
 
 const (
