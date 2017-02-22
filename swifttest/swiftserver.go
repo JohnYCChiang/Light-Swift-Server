@@ -6,7 +6,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -116,39 +115,18 @@ func NewSwiftServer() (*SwiftServer, error) {
 		return nil, fmt.Errorf("cannot listen on %s: %v", listener.Addr(), err)
 	}
 
-	// Get listening IP
-	/*
-		    host, _ := os.Hostname()
-			addresses, _ := net.LookupIP(host)
-			var listenIP string
-			for _, address := range addresses {
-				if ipv4 := address.To4(); ipv4 != nil && ipv4.IsGlobalUnicast() {
-					listenIP = ipv4.String()
-					break
-				}
-			}
-	*/
+	// Get working ip by using the local ip
+	// that connect to www.google.com:80
+	// But if there are not pubic ip ?
+	conn, err := net.Dial("udp", "www.google.com:80")
 
-	// Get IP from Arguments
-	allArgs := os.Args
-	executable := os.Args[0]
-	argsLength := len(allArgs)
-
-	if argsLength != 2 {
-		fmt.Print("\nUsage: \n")
-		fmt.Printf("%s %s\n", executable, "[IP address]")
-		os.Exit(2)
+	if err != nil {
+		log.Fatal("Dial Failed")
 	}
+	defer conn.Close()
 
-	ip := os.Args[1]
-	ipObj := net.ParseIP(ip)
-
-	if ipObj.To4() == nil {
-		fmt.Printf("%v is not a vaild IPv4 address\n", ip)
-		os.Exit(2)
-	}
-
-	listenIP := ip
+	ipWithPort := conn.LocalAddr().String()
+	listenIP := strings.Split(ipWithPort, ":")[0]
 
 	server := &SwiftServer{
 		Listener: listener,
