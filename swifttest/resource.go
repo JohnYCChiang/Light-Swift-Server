@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	disk "light-swift-server/io"
 	"log"
 	"mime"
 	"net/http"
@@ -30,13 +31,13 @@ type resource interface {
 type objectResource struct {
 	name      string
 	version   string
-	container *container // always non-nil.
-	object    *object    // may be nil.
+	container *Container // always non-nil.
+	object    *Object    // may be nil.
 }
 
 type containerResource struct {
 	name      string
-	container *container // non-nil if the container already exists.
+	container *Container // non-nil if the container already exists.
 }
 
 // GET on a container lists the objects in the container.
@@ -51,8 +52,8 @@ func (r containerResource) get(a *action) interface{} {
 	format := a.req.URL.Query().Get("format")
 	parent := a.req.Form.Get("path")
 
-	a.w.Header().Set("X-Container-Bytes-Used", strconv.Itoa(r.container.bytes))
-	a.w.Header().Set("X-Container-Object-Count", strconv.Itoa(len(r.container.objects)))
+	a.w.Header().Set("X-Container-Bytes-Used", strconv.Itoa(r.container.Bytes))
+	a.w.Header().Set("X-Container-Object-Count", strconv.Itoa(len(r.container.Objects)))
 	r.container.getMetadata(a)
 
 	if a.req.Method == "HEAD" {
@@ -65,7 +66,7 @@ func (r containerResource) get(a *action) interface{} {
 		a.w.Header().Set("Content-Type", "application/json")
 		var resp []interface{}
 		for _, item := range objects {
-			if obj, ok := item.(*object); ok {
+			if obj, ok := item.(*Object); ok {
 				resp = append(resp, obj.Key())
 			} else {
 				resp = append(resp, item)
@@ -74,8 +75,8 @@ func (r containerResource) get(a *action) interface{} {
 		return resp
 	} else {
 		for _, item := range objects {
-			if obj, ok := item.(*object); ok {
-				a.w.Write([]byte(obj.name + "\n"))
+			if obj, ok := item.(*Object); ok {
+				a.w.Write([]byte(obj.Name + "\n"))
 			} else if subdir, ok := item.(Subdir); ok {
 				a.w.Write([]byte(subdir.Subdir + "\n"))
 			}
@@ -89,10 +90,10 @@ func (r containerResource) delete(a *action) interface{} {
 	if b == nil {
 		fatalf(404, "NoSuchContainer", "The specified container does not exist")
 	}
-	if len(b.objects) > 0 {
+	if len(b.Objects) > 0 {
 		fatalf(409, "Conflict", "The container you tried to delete is not empty")
 	}
-	delete(a.user.Containers, b.name)
+	delete(a.user.Containers, b.Name)
 	a.user.Account.Containers--
 	return nil
 }
@@ -106,11 +107,11 @@ func (r containerResource) put(a *action) interface{} {
 		if !validContainerName(r.name) {
 			fatalf(400, "InvalidContainerName", "The specified container is not valid")
 		}
-		r.container = &container{
-			name:    r.name,
-			objects: make(map[string]*object),
-			metadata: metadata{
-				meta: make(http.Header),
+		r.container = &Container{
+			Name:    r.name,
+			Objects: make(map[string]*Object),
+			Metadata: Metadata{
+				Meta: make(http.Header),
 			},
 		}
 		r.container.setMetadata(a, CONTAINER_TYPE)
@@ -121,6 +122,7 @@ func (r containerResource) put(a *action) interface{} {
 	return nil
 }
 
+// Create Container and update meta
 func (r containerResource) post(a *action) interface{} {
 	// When input container is null
 	if r.container == nil {
@@ -128,25 +130,30 @@ func (r containerResource) post(a *action) interface{} {
 		if !validContainerName(r.name) {
 			fatalf(400, "InvalidContainerName", "The specified container is not valid")
 		}
-		r.container = &container{
-			name:    r.name,
-			objects: make(map[string]*object),
-			metadata: metadata{
-				meta: make(http.Header),
+		r.container = &Container{
+			Name:    r.name,
+			Objects: make(map[string]*Object),
+			Metadata: Metadata{
+				Meta: make(http.Header),
 			},
 		}
 		r.container.setMetadata(a, CONTAINER_TYPE)
 		a.user.Containers[r.name] = r.container
 		a.user.Account.Containers++
 		// OLD CODE :: fatalf(400, "Method", "The resource could not be found.")
+		//saveContainerToDisk(TEST_ACCOUNT, r.name, r.container)
+		path := fmt.Sprintf("./testData/%s/%s", TEST_ACCOUNT, r.name)
+		disk.Save(path, r.container)
 	} else {
 		r.container.setMetadata(a, CONTAINER_TYPE)
 		a.w.WriteHeader(201)
 		jsonMarshal(a.w, Folder{
-			Count: len(r.container.objects),
-			Bytes: r.container.bytes,
-			Name:  r.container.name,
+			Count: len(r.container.Objects),
+			Bytes: r.container.Bytes,
+			Name:  r.container.Name,
 		})
+		path := fmt.Sprintf("./testData/%s/%s", TEST_ACCOUNT, r.name)
+		disk.Save(path, r.container)
 	}
 	return nil
 }
@@ -187,7 +194,7 @@ func (objr objectResource) get(a *action) interface{} {
 		return b
 	}
 
-	if manifest, ok := obj.meta["X-Object-Manifest"]; ok {
+	if manifest, ok := obj.Meta["X-Object-Manifest"]; ok {
 		var segments []io.Reader
 		components := strings.SplitN(manifest[0], "/", 2)
 		segContainer := a.user.Containers[components[0]]
@@ -197,14 +204,14 @@ func (objr objectResource) get(a *action) interface{} {
 		cursor := 0
 		size := 0
 		for _, item := range resp {
-			if obj, ok := item.(*object); ok {
-				length := len(obj.data)
+			if obj, ok := item.(*Object); ok {
+				length := len(obj.Data)
 				size += length
-				sum.Write([]byte(hex.EncodeToString(obj.checksum)))
+				sum.Write([]byte(hex.EncodeToString(obj.Checksum)))
 				if start >= cursor+length {
 					continue
 				}
-				segments = append(segments, bytes.NewReader(obj.data[max(0, start-cursor):]))
+				segments = append(segments, bytes.NewReader(obj.Data[max(0, start-cursor):]))
 				cursor += length
 			}
 		}
@@ -215,15 +222,15 @@ func (objr objectResource) get(a *action) interface{} {
 		reader = io.LimitReader(io.MultiReader(segments...), int64(end-start))
 	} else {
 		if end == -1 {
-			end = len(obj.data)
+			end = len(obj.Data)
 		}
-		etag = obj.checksum
-		reader = bytes.NewReader(obj.data[start:end])
+		etag = obj.Checksum
+		reader = bytes.NewReader(obj.Data[start:end])
 	}
 
 	h.Set("Content-Length", fmt.Sprint(end-start))
 	h.Set("ETag", hex.EncodeToString(etag))
-	h.Set("Last-Modified", obj.mtime.Format(http.TimeFormat))
+	h.Set("Last-Modified", obj.Mtime.Format(http.TimeFormat))
 
 	if a.req.Method == "HEAD" {
 		return nil
@@ -265,21 +272,21 @@ func (objr objectResource) put(a *action) interface{} {
 	// TODO is this correct, or should we erase all previous metadata?
 	obj := objr.object
 	if obj == nil {
-		obj = &object{
-			name: objr.name,
-			metadata: metadata{
-				meta: make(http.Header),
+		obj = &Object{
+			Name: objr.name,
+			Metadata: Metadata{
+				Meta: make(http.Header),
 			},
 		}
 		a.user.Objects++
 	} else {
-		objr.container.bytes -= len(obj.data)
-		a.user.BytesUsed -= int64(len(obj.data))
+		objr.container.Bytes -= len(obj.Data)
+		a.user.BytesUsed -= int64(len(obj.Data))
 	}
 
 	var content_type string
 	if content_type = a.req.Header.Get("Content-Type"); content_type == "" {
-		content_type = mime.TypeByExtension(obj.name)
+		content_type = mime.TypeByExtension(obj.Name)
 		if content_type == "" {
 			content_type = "application/octet-stream"
 		}
@@ -287,16 +294,16 @@ func (objr objectResource) put(a *action) interface{} {
 
 	// PUT request has been successful - save data and metadata
 	obj.setMetadata(a, "object")
-	obj.content_type = content_type
-	obj.data = data
-	obj.checksum = gotHash
-	obj.mtime = time.Now().UTC()
-	objr.container.objects[objr.name] = obj
-	objr.container.bytes += len(data)
+	obj.Content_type = content_type
+	obj.Data = data
+	obj.Checksum = gotHash
+	obj.Mtime = time.Now().UTC()
+	objr.container.Objects[objr.name] = obj
+	objr.container.Bytes += len(data)
 	a.user.BytesUsed += int64(len(data))
 
 	h := a.w.Header()
-	h.Set("ETag", hex.EncodeToString(obj.checksum))
+	h.Set("ETag", hex.EncodeToString(obj.Checksum))
 
 	return nil
 }
@@ -306,9 +313,9 @@ func (objr objectResource) delete(a *action) interface{} {
 		fatalf(404, "NoSuchKey", "The specified key does not exist.")
 	}
 
-	objr.container.bytes -= len(objr.object.data)
-	a.user.BytesUsed -= int64(len(objr.object.data))
-	delete(objr.container.objects, objr.name)
+	objr.container.Bytes -= len(objr.object.Data)
+	a.user.BytesUsed -= int64(len(objr.object.Data))
+	delete(objr.container.Objects, objr.name)
 	a.user.Objects--
 	return nil
 }
@@ -331,7 +338,7 @@ func (objr objectResource) copy(a *action) interface{} {
 	}
 
 	var (
-		obj2  *object
+		obj2  *Object
 		objr2 objectResource
 	)
 
@@ -341,32 +348,32 @@ func (objr objectResource) copy(a *action) interface{} {
 	case objectResource:
 		objr2 = t
 		if objr2.object == nil {
-			obj2 = &object{
-				name: objr2.name,
-				metadata: metadata{
-					meta: make(http.Header),
+			obj2 = &Object{
+				Name: objr2.name,
+				Metadata: Metadata{
+					Meta: make(http.Header),
 				},
 			}
 			a.user.Objects++
 		} else {
 			obj2 = objr2.object
-			objr2.container.bytes -= len(obj2.data)
-			a.user.BytesUsed -= int64(len(obj2.data))
+			objr2.container.Bytes -= len(obj2.Data)
+			a.user.BytesUsed -= int64(len(obj2.Data))
 		}
 	default:
 		fatalf(400, "Bad Request", "Destination must point to a valid object path")
 	}
 
-	obj2.content_type = obj.content_type
-	obj2.data = obj.data
-	obj2.checksum = obj.checksum
-	obj2.mtime = time.Now()
-	objr2.container.objects[objr2.name] = obj2
-	objr2.container.bytes += len(obj.data)
-	a.user.BytesUsed += int64(len(obj.data))
+	obj2.Content_type = obj.Content_type
+	obj2.Data = obj.Data
+	obj2.Checksum = obj.Checksum
+	obj2.Mtime = time.Now()
+	objr2.container.Objects[objr2.name] = obj2
+	objr2.container.Bytes += len(obj.Data)
+	a.user.BytesUsed += int64(len(obj.Data))
 
-	for key, values := range obj.metadata.meta {
-		obj2.metadata.meta[key] = values
+	for key, values := range obj.Metadata.Meta {
+		obj2.Metadata.Meta[key] = values
 	}
 	obj2.setMetadata(a, "object")
 

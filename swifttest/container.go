@@ -1,6 +1,8 @@
 package swifttest
 
 import (
+	"fmt"
+	"light-swift-server/io"
 	"path"
 	"sort"
 	"strings"
@@ -19,20 +21,20 @@ type Key struct {
 	// Owner        Owner
 }
 
-type container struct {
-	metadata
-	name    string
-	ctime   time.Time
-	objects map[string]*object
-	bytes   int
+type Container struct {
+	Metadata
+	Name    string
+	Ctime   time.Time
+	Objects map[string]*Object
+	Bytes   int
 }
 
-func (c container) list(delimiter string, marker string, prefix string, parent string) (resp []interface{}) {
+func (c Container) list(delimiter string, marker string, prefix string, parent string) (resp []interface{}) {
 	var tmp orderedObjects
 
 	// first get all matching objects and arrange them in alphabetical order.
-	for _, obj := range c.objects {
-		if strings.HasPrefix(obj.name, prefix) {
+	for _, obj := range c.Objects {
+		if strings.HasPrefix(obj.Name, prefix) {
 			tmp = append(tmp, obj)
 		}
 	}
@@ -40,19 +42,19 @@ func (c container) list(delimiter string, marker string, prefix string, parent s
 
 	var prefixes []string
 	for _, obj := range tmp {
-		if !strings.HasPrefix(obj.name, prefix) {
+		if !strings.HasPrefix(obj.Name, prefix) {
 			continue
 		}
 
 		isPrefix := false
-		name := obj.name
+		name := obj.Name
 		if parent != "" {
-			if path.Dir(obj.name) != path.Clean(parent) {
+			if path.Dir(obj.Name) != path.Clean(parent) {
 				continue
 			}
 		} else if delimiter != "" {
-			if i := strings.Index(obj.name[len(prefix):], delimiter); i >= 0 {
-				name = obj.name[:len(prefix)+i+len(delimiter)]
+			if i := strings.Index(obj.Name[len(prefix):], delimiter); i >= 0 {
+				name = obj.Name[:len(prefix)+i+len(delimiter)]
 				if prefixes != nil && prefixes[len(prefixes)-1] == name {
 					continue
 				}
@@ -96,4 +98,10 @@ func validContainerName(name string) bool {
 		}
 	}
 	return true
+}
+
+// Save container to disk
+func saveContainerToDisk(userName string, containerName string, c *Container) {
+	path := fmt.Sprintf("./testData/%s/%s", userName, containerName)
+	io.Save(path, c)
 }

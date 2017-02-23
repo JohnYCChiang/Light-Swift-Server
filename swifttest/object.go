@@ -5,21 +5,21 @@ import (
 	"time"
 )
 
-type object struct {
-	metadata
-	name         string
-	mtime        time.Time
-	checksum     []byte // also held as ETag in meta.
-	data         []byte
-	content_type string
+type Object struct {
+	Metadata
+	Name         string
+	Mtime        time.Time
+	Checksum     []byte // also held as ETag in meta.
+	Data         []byte
+	Content_type string
 }
 
-func (obj *object) Key() Key {
+func (obj *Object) Key() Key {
 	return Key{
-		Key:          obj.name,
-		LastModified: obj.mtime.Format("2006-01-02T15:04:05"),
-		Size:         int64(len(obj.data)),
-		ETag:         fmt.Sprintf("%x", obj.checksum),
-		ContentType:  obj.content_type,
+		Key:          obj.Name,
+		LastModified: obj.Mtime.Format("2006-01-02T15:04:05"),
+		Size:         int64(len(obj.Data)),
+		ETag:         fmt.Sprintf("%x", obj.Checksum),
+		ContentType:  obj.Content_type,
 	}
 }
