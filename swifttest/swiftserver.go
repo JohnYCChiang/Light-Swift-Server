@@ -44,15 +44,15 @@ type session struct {
 	username string
 }
 
-type metadata struct {
-	meta http.Header // metadata to return with requests.
+type Metadata struct {
+	Meta http.Header // metadata to return with requests.
 }
 
 type account struct {
 	swift.Account
-	metadata
+	Metadata
 	password   string
-	Containers map[string]*container
+	Containers map[string]*Container
 }
 
 var pathRegexp = regexp.MustCompile("/v1/AUTH_([a-zA-Z0-9]+)(/([^/]+)(/(.*))?)?")
@@ -103,7 +103,7 @@ func (srv *SwiftServer) resourceForURL(u *url.URL) (r resource) {
 		container: b.container,
 	}
 
-	if obj := objr.container.objects[objr.name]; obj != nil {
+	if obj := objr.container.Objects[objr.name]; obj != nil {
 		objr.object = obj
 	}
 	return objr
@@ -138,10 +138,10 @@ func NewSwiftServer() (*SwiftServer, error) {
 
 	server.Accounts[TEST_ACCOUNT] = &account{
 		password: TEST_ACCOUNT,
-		metadata: metadata{
-			meta: make(http.Header),
+		Metadata: Metadata{
+			Meta: make(http.Header),
 		},
-		Containers: make(map[string]*container),
+		Containers: make(map[string]*Container),
 	}
 
 	go http.Serve(listener, http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -160,22 +160,22 @@ func (s *SwiftServer) Close() {
 	s.Listener.Close()
 }
 
-func (m metadata) setMetadata(a *action, resource string) {
+func (m Metadata) setMetadata(a *action, resource string) {
 	for key, values := range a.req.Header {
 		key = http.CanonicalHeaderKey(key)
 		if metaHeaders[key] || strings.HasPrefix(key, "X-"+strings.Title(resource)+"-Meta-") {
 			if values[0] != "" || resource == "object" {
-				m.meta[key] = values
+				m.Meta[key] = values
 			} else {
-				m.meta.Del(key)
+				m.Meta.Del(key)
 			}
 		}
 	}
 }
 
-func (m metadata) getMetadata(a *action) {
+func (m Metadata) getMetadata(a *action) {
 	h := a.w.Header()
-	for name, d := range m.meta {
+	for name, d := range m.Meta {
 		h[name] = d
 	}
 }

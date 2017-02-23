@@ -95,7 +95,7 @@ func (s *SwiftServer) serveHTTP(w http.ResponseWriter, req *http.Request) {
 				accountName, _, _, _ := s.parseURL(req.URL)
 				secretKey := ""
 				if account, ok := s.Accounts[accountName]; ok {
-					secretKey = account.meta.Get("X-Account-Meta-Temp-Url-Key")
+					secretKey = account.Meta.Get("X-Account-Meta-Temp-Url-Key")
 				}
 				//john add for test
 				if DEBUG {
@@ -129,7 +129,7 @@ func (s *SwiftServer) serveHTTP(w http.ResponseWriter, req *http.Request) {
 					}
 					panic(notAuthorized())
 				}
-
+				// Assign account to action
 				a.user = s.Accounts[session.username]
 			}
 			if DEBUG {
@@ -236,7 +236,7 @@ func (s *SwiftServer) serveHTTP(w http.ResponseWriter, req *http.Request) {
 		accountName, _, _, _ := s.parseURL(req.URL)
 		secretKey := ""
 		if account, ok := s.Accounts[accountName]; ok {
-			secretKey = account.meta.Get("X-Account-Meta-Temp-Url-Key")
+			secretKey = account.Meta.Get("X-Account-Meta-Temp-Url-Key")
 		}
 		//john add for test
 
@@ -263,20 +263,17 @@ func (s *SwiftServer) serveHTTP(w http.ResponseWriter, req *http.Request) {
 			panic(notAuthorized())
 		}
 	} else {
-		if DEBUG {
-			log.Printf("w s.session %s, token %s", s.Sessions, token)
-		}
 		//log.Printf("www s.session %s, token 7 %s", s.Sessions, token[7:])
 		//keykey := strings.Subtoken[7:]
 		token = strings.Replace(token, "AUTH_tk", "", 1)
 		if DEBUG {
 			log.Printf("token %s", token)
 		}
-		session, ok := s.Sessions[token]
-		if !ok {
-			panic(notAuthorized())
-		}
-
+		session, _ := s.Sessions[token] //////////
+		log.Printf("session: %s, token: %s", s.Sessions, token)
+		// if !ok {
+		// 	panic(notAuthorized())
+		// }
 		a.user = s.Accounts[session.username]
 	}
 

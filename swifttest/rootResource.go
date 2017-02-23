@@ -21,7 +21,7 @@ func (rootResource) get(a *action) interface{} {
 	h.Set("X-Account-Object-Count", strconv.Itoa(int(a.user.Objects)))
 
 	// add metadata
-	a.user.metadata.getMetadata(a)
+	a.user.Metadata.getMetadata(a)
 
 	if a.req.Method == "HEAD" {
 		return nil
@@ -30,7 +30,7 @@ func (rootResource) get(a *action) interface{} {
 	var tmp orderedContainers
 	// first get all matching objects and arrange them in alphabetical order.
 	for _, container := range a.user.Containers {
-		if strings.HasPrefix(container.name, prefix) {
+		if strings.HasPrefix(container.Name, prefix) {
 			tmp = append(tmp, container)
 		}
 	}
@@ -38,17 +38,17 @@ func (rootResource) get(a *action) interface{} {
 
 	resp := make([]Folder, 0)
 	for _, container := range tmp {
-		if container.name <= marker {
+		if container.Name <= marker {
 			continue
 		}
 		if format == "json" {
 			resp = append(resp, Folder{
-				Count: len(container.objects),
-				Bytes: container.bytes,
-				Name:  container.name,
+				Count: len(container.Objects),
+				Bytes: container.Bytes,
+				Name:  container.Name,
 			})
 		} else {
-			a.w.Write([]byte(container.name + "\n"))
+			a.w.Write([]byte(container.Name + "\n"))
 		}
 	}
 
@@ -60,7 +60,7 @@ func (rootResource) get(a *action) interface{} {
 }
 
 func (r rootResource) post(a *action) interface{} {
-	a.user.metadata.setMetadata(a, "account")
+	a.user.Metadata.setMetadata(a, "account")
 	return nil
 }
 
